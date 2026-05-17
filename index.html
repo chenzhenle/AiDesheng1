@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高尔夫18洞成绩统计系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "微软雅黑", sans-serif;
+        }
+        body {
+            background-color: #eef5ee;
+            padding: 20px;
+        }
+        .main-box {
+            max-width: 850px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 3px 15px rgba(0,80,30,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #2c6e31;
+            margin-bottom: 25px;
+        }
+        .input-par {
+            margin-bottom: 20px;
+        }
+        .input-par input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+        .btn-start {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: #2c6e31;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .hole-card {
+            border: 1px solid #d0e8d0;
+            border-radius: 12px;
+            padding: 20px;
+            background: #f8fdf8;
+            margin: 15px 0;
+        }
+        .hole-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #2c6e31;
+            margin-bottom: 18px;
+        }
+        .item-row {
+            margin: 14px 0;
+            font-size: 15px;
+        }
+        .btn-yes {
+            background: #34a853;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        .btn-no {
+            background: #ea4335;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        .num-input {
+            width: 80px;
+            padding: 6px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin: 0 8px;
+        }
+        .btn-confirm {
+            background: #4285f4;
+            color: #fff;
+            border: none;
+            padding: 8px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .result-box {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f0f8ff;
+            border-radius: 10px;
+            line-height: 2.2;
+            font-size: 15px;
+        }
+        .hide {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+<div class="main-box">
+    <h1>⛳ 高尔夫18洞计分统计系统</h1>
+
+    <!-- 第一步：输入杆型 -->
+    <div id="step1">
+        <div class="input-par">
+            <input type="text" id="parText" placeholder="输入18洞杆型，英文逗号分隔 例：4,4,5,4,3...">
+        </div>
+        <button class="btn-start" onclick="initGame()">开始录入成绩</button>
+    </div>
+
+    <!-- 单洞录入区域（同页统一展示） -->
+    <div id="holeArea" class="hide"></div>
+
+    <!-- 最终统计结果 -->
+    <div id="resultArea" class="hide result-box"></div>
+</div>
+
+<script>
+// 全局统计变量
+let parArr = [];
+let nowHole = 0;
+let driveBase = 0;
+let driveSuccessCnt = 0;
+let girCount = 0;
+let saveParCnt = 0;
+let allPutt = 0;
+let chanceCount = 0;
+let scoreSuccess = 0;
+let courseTotalPar = 0;
+let myTotalStroke = 0;
+
+// 初始化游戏
+function initGame(){
+    let str = document.getElementById("parText").value.replace(/，/g,",").replace(/\s/g,"");
+    parArr = str.split(",").map(Number);
+    if(parArr.length !== 18){
+        alert("请输入完整18个洞杆型！");
+        return;
+    }
+    courseTotalPar = parArr.reduce((a,b)=>a+b,0);
+    driveBase = parArr.filter(p=>p!==3).length;
+    document.getElementById("step1").classList.add("hide");
+    document.getElementById("holeArea").classList.remove("hide");
+    renderHolePage();
+}
+
+// 渲染当前整洞页面（所有选项同页显示）
+function renderHolePage(){
+    if(nowHole >= 18){
+        showAllResult();
+        return;
+    }
+    let curPar = parArr[nowHole];
+    let html = `
+    <div class="hole-card">
+        <div class="hole-title">第${nowHole+1}洞 · 标准杆${curPar}杆</div>
+        <div id="contentBox">
+    `;
+    // 存储当前选择
+    window.tempData = {
+        par:curPar,
+        driveOk:null,
+        twoOn:null,
+        girOk:null,
+        canScore:null,
+        onNum:0,
+        puttNum:0
+    }
+
+    // 1. 非3杆洞显示开球选择
+    if(curPar !== 3){
+        html += `
+        <div class="item-row">
+            是否开球成功：
+            <button class="btn-yes" onclick="chooseDrive(true)">Yes</button>
+            <button class="btn-no" onclick="chooseDrive(false)">No</button>
+        </div>
+        <div id="driveTip" style="color:#666;font-size:14px;"></div>
+        `;
+    }else{
+        window.tempData.driveOk = true;
+        html += `<div class="item-row">3杆洞无需统计开球</div>`;
+    }
+
+    // 2. 5杆洞两on选择容器
+    html += `<div id="twoOnBox"></div>`;
+    // 3. 标ON选择容器
+    html += `<div id="girBox"></div>`;
+    // 4. 得分机会选择容器
+    html += `<div id="scoreBox"></div>`;
+    // 5. 推杆输入容器
+    html += `<div id="puttBox"></div>`;
+    // 6. 几on几推输入容器
+    html += `<div id="onPuttBox"></div>`;
+
+    html += `</div></div>`;
+    document.getElementById("holeArea").innerHTML = html;
+
+    // 3杆洞直接走标ON流程
+    if(curPar === 3){
+        showGirSelect();
+    }
+}
+
+// 选择开球
+function chooseDrive(flag){
+    window.tempData.driveOk = flag;
+    let tip = document.getElementById("driveTip");
+    if(flag){
+        driveSuccessCnt++;
+        tip.innerText = "已选择：开球成功";
+        // 5杆洞显示两on选项
+        if(window.tempData.par ===5){
+            showTwoOnSelect();
+        }else{
+            showGirSelect();
+        }
+    }else{
+        tip.innerText = "已选择：开球失败";
+        // 开球失败直接填几on几推
+        showOnPuttInput();
+        // 隐藏后续所有选项
+        document.getElementById("twoOnBox").innerHTML = "";
+        document.getElementById("girBox").innerHTML = "";
+        document.getElementById("scoreBox").innerHTML = "";
+        document.getElementById("puttBox").innerHTML = "";
+    }
+}
+
+// 5杆洞选择是否两on
+function showTwoOnSelect(){
+    let box = document.getElementById("twoOnBox");
+    box.innerHTML = `
+    <div class="item-row">
+        是否两on：
+        <button class="btn-yes" onclick="chooseTwoOn(true)">Yes</button>
+        <button class="btn-no" onclick="chooseTwoOn(false)">No</button>
+    </div>
+    `;
+}
+function chooseTwoOn(flag){
+    window.tempData.twoOn = flag;
+    if(flag){
+        window.tempData.girOk = true;
+        girCount++;
+        showScoreSelect();
+        document.getElementById("girBox").innerHTML = "";
+    }else{
+        showGirSelect();
+    }
+}
+
+// 显示是否标ON选择
+function showGirSelect(){
+    let box = document.getElementById("girBox");
+    box.innerHTML = `
+    <div class="item-row">
+        是否标ON：
+        <button class="btn-yes" onclick="chooseGir(true)">Yes</button>
+        <button class="btn-no" onclick="chooseGir(false)">No</button>
+    </div>
+    `;
+}
+function chooseGir(flag){
+    window.tempData.girOk = flag;
+    if(flag){
+        girCount++;
+        showScoreSelect();
+        document.getElementById("onPuttBox").innerHTML = "";
+    }else{
+        showOnPuttInput();
+        document.getElementById("scoreBox").innerHTML = "";
+        document.getElementById("puttBox").innerHTML = "";
+    }
+}
+
+// 显示是否6码内可得分
+function showScoreSelect(){
+    let box = document.getElementById("scoreBox");
+    box.innerHTML = `
+    <div class="item-row">
+        是否6码以内可得分：
+        <button class="btn-yes" onclick="chooseScore(true)">Yes</button>
+        <button class="btn-no" onclick="chooseScore(false)">No</button>
+    </div>
+    `;
+}
+function chooseScore(flag){
+    window.tempData.canScore = flag;
+    if(flag) chanceCount++;
+    showPuttInput();
+    document.getElementById("onPuttBox").innerHTML = "";
+}
+
+// 标ON后输入推杆数
+function showPuttInput(){
+    let box = document.getElementById("puttBox");
+    box.innerHTML = `
+    <div class="item-row">
+        本洞推杆数：
+        <input class="num-input" type="number" id="pNum" placeholder="填数字">
+        <button class="btn-confirm" onclick="savePuttData()">确认录入</button>
+    </div>
+    `;
+}
+// 保存推杆数据
+function savePuttData(){
+    let p = parseInt(document.getElementById("pNum").value) || 0;
+    allPutt += p;
+    // 标ON默认本洞杆数=标准杆
+    myTotalStroke += window.tempData.par;
+    // 可得分+1推 = 得分成功
+    if(window.tempData.canScore && p ===1){
+        scoreSuccess++;
+    }
+    nextHole();
+}
+
+// 未标ON/开球失败 输入几on几推
+function showOnPuttInput(){
+    let box = document.getElementById("onPuttBox");
+    box.innerHTML = `
+    <div class="item-row">
+        几on：<input class="num-input" type="number" id="onN" placeholder="数字">
+        几推：<input class="num-input" type="number" id="puttN" placeholder="数字">
+        <button class="btn-confirm" onclick="saveOnPuttData()">确认录入</button>
+    </div>
+    `;
+}
+// 保存几on几推
+function saveOnPuttData(){
+    let on = parseInt(document.getElementById("onN").value)||0;
+    let put = parseInt(document.getElementById("puttN").value)||0;
+    let holeTotal = on + put;
+    allPutt += put;
+    myTotalStroke += holeTotal;
+    // 未标ON 杆数等于标准杆 统计救球
+    if(holeTotal === window.tempData.par){
+        saveParCnt++;
+    }
+    nextHole();
+}
+
+// 进入下一洞
+function nextHole(){
+    nowHole++;
+    renderHolePage();
+}
+
+// 展示全部统计结果
+function showAllResult(){
+    document.getElementById("holeArea").classList.add("hide");
+    document.getElementById("resultArea").classList.remove("hide");
+    let diff = myTotalStroke - courseTotalPar;
+    let noGirNum = 18 - girCount;
+    let saveRate = noGirNum ===0 ? "100%" : `${saveParCnt}/${noGirNum}`;
+    let scoreRate = chanceCount ===0 ? "0%" : `${scoreSuccess}/${chanceCount}`;
+
+    let resHtml = `
+1. 球场总标准杆：${courseTotalPar} 杆<br>
+2. 个人全场总杆数：${myTotalStroke} 杆<br>
+3. 总杆差距：${diff>0?'+':''}${diff} 杆<br>
+4. 开球成功率：${driveSuccessCnt}/${driveBase}<br>
+5. 标准杆上果岭率：${girCount}/18<br>
+6. 救球保帕率：${saveRate}<br>
+7. 全场总推杆数：${allPutt}<br>
+8. 6码内得分机会洞：${chanceCount} 洞<br>
+9. 近距离得分转化率：${scoreRate}
+    `;
+    document.getElementById("resultArea").innerHTML = resHtml;
+}
+</script>
+</body>
+</html>
